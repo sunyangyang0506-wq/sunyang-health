@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS body_metrics (
     source TEXT,
     confidence TEXT DEFAULT 'B'
 );
-
 CREATE TABLE IF NOT EXISTS activity_metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     record_date TEXT NOT NULL,
@@ -28,7 +27,6 @@ CREATE TABLE IF NOT EXISTS activity_metrics (
     hrv_ms REAL,
     source TEXT
 );
-
 CREATE TABLE IF NOT EXISTS sleep_metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     record_date TEXT NOT NULL,
@@ -38,7 +36,6 @@ CREATE TABLE IF NOT EXISTS sleep_metrics (
     awake_times INTEGER,
     source TEXT
 );
-
 CREATE TABLE IF NOT EXISTS nutrition_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     record_date TEXT NOT NULL,
@@ -49,7 +46,6 @@ CREATE TABLE IF NOT EXISTS nutrition_records (
     fiber_g REAL,
     source TEXT
 );
-
 CREATE TABLE IF NOT EXISTS health_scores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     record_date TEXT NOT NULL,
@@ -58,6 +54,21 @@ CREATE TABLE IF NOT EXISTS health_scores (
     recovery_score REAL,
     nutrition_score REAL,
     total_score REAL
+);
+CREATE TABLE IF NOT EXISTS daily_snapshots (
+    record_date TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    quality_json TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS ingestion_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    record_count INTEGER DEFAULT 0,
+    day_count INTEGER DEFAULT 0,
+    status TEXT NOT NULL,
+    detail TEXT
 );
 """
 
