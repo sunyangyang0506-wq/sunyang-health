@@ -1,0 +1,23 @@
+profile:
+  gender: female
+  birth_year: 1986
+  height_cm: 175
+
+health_background:
+  thyroidectomy: true
+  medication:
+    - levothyroxine
+
+objectives:
+  primary: reduce_body_fat
+  target_body_fat: 27-28%
+  preserve_muscle: true
+
+nutrition:
+  protein_target_g: 100-120
+  avoid_extreme_calorie_deficit: true
+
+training:
+  strength_days_per_week: 3
+  zone2_days_per_week: 2
+  daily_steps_target: 8000
