@@ -1,3 +1,5 @@
 pydantic>=2.7,<3
 streamlit>=1.37,<2
 pandas>=2.2,<3
+fastapi>=0.116,<1
+uvicorn[standard]>=0.30,<1
