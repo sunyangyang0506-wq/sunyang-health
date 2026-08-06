@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from app.database.db import get_connection, init_db
+from app.reports.daily_report import generate_daily_report
 from app.services.health_pipeline import build_daily_snapshot, ingest_apple_health
 
 app = FastAPI(title="Personal Health Digital Twin API", version="1.0.0")
@@ -43,6 +44,11 @@ def sync_apple_health(payload: SyncPayload) -> dict[str, Any]:
 @app.get("/v1/snapshot/{record_date}", dependencies=[Depends(require_token)])
 def daily_snapshot(record_date: date) -> dict[str, Any]:
     return build_daily_snapshot(record_date)
+
+
+@app.get("/v1/report/{record_date}", dependencies=[Depends(require_token)])
+def daily_report(record_date: date) -> dict[str, Any]:
+    return generate_daily_report(build_daily_snapshot(record_date))
 
 
 @app.get("/v1/snapshots", dependencies=[Depends(require_token)])
