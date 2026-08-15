@@ -1,0 +1,16 @@
+{
+  "description": "Female Health Digital Twin mini program demo",
+  "packOptions": {"ignore": []},
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "enhance": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "trial",
+  "appid": "touristappid",
+  "projectname": "female-health-digital-twin",
+  "miniprogramRoot": "./"
+}
