@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Sunyang Health",
+    "slug": "sunyang-health",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "sunyanghealth",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sunyang.health"
+    },
+    "android": {
+      "package": "com.sunyang.health"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "允许使用 Face ID 解锁你的个人健康数据。"
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "用于读取睡眠、心率、活动量和身体组成数据，以生成个人健康趋势和每日建议。",
+          "NSHealthUpdateUsageDescription": "当前版本不主动写入健康数据；如未来启用写入，将在操作前再次征得授权。",
+          "background": false
+        }
+      ]
+    ],
+    "extra": {
+      "apiBase": ""
+    }
+  }
+}
