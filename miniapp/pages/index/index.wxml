@@ -1,0 +1,116 @@
+<view class="page">
+  <view class="hero card">
+    <view class="hero-top">
+      <view>
+        <text class="eyebrow">FEMALE HEALTH DIGITAL TWIN</text>
+        <view class="title">今日身体状态</view>
+      </view>
+      <view class="status-pill">{{readiness.level}}</view>
+    </view>
+    <view class="score-row">
+      <view class="score-circle">
+        <text class="score">{{readiness.score}}</text>
+        <text class="score-label">Readiness</text>
+      </view>
+      <view class="score-copy">
+        <view class="summary">{{readiness.summary}}</view>
+        <block wx:for="{{readiness.reasons}}" wx:key="*this">
+          <view class="reason">• {{item}}</view>
+        </block>
+      </view>
+    </view>
+    <view class="privacy">{{meta.updatedAt}}</view>
+  </view>
+
+  <view class="tabs">
+    <block wx:for="{{tabs}}" wx:key="key">
+      <view class="tab {{activeTab === item.key ? 'tab-active' : ''}}" data-key="{{item.key}}" bindtap="switchTab">{{item.label}}</view>
+    </block>
+  </view>
+
+  <block wx:if="{{activeTab === 'today'}}">
+    <view class="section-title">关键指标</view>
+    <view class="metric-grid">
+      <block wx:for="{{metrics}}" wx:key="key">
+        <view class="metric card">
+          <view class="metric-label">{{item.label}}</view>
+          <view><text class="metric-value">{{item.value}}</text><text class="metric-unit">{{item.unit}}</text></view>
+          <view class="metric-hint">{{item.hint}}</view>
+        </view>
+      </block>
+    </view>
+
+    <view class="section-title">今日行动</view>
+    <view class="card action-card">
+      <block wx:for="{{actions}}" wx:key="*this">
+        <view class="action-row">
+          <view class="action-index">{{index + 1}}</view>
+          <view class="action-text">{{item}}</view>
+        </view>
+      </block>
+    </view>
+  </block>
+
+  <block wx:if="{{activeTab === 'trends'}}">
+    <view class="section-title">趋势与数据质量</view>
+    <view class="card trend-card">
+      <block wx:for="{{trends}}" wx:key="label">
+        <view class="trend-row">
+          <view class="trend-head">
+            <text>{{item.label}}</text>
+            <text class="trend-value">{{item.value}}%</text>
+          </view>
+          <view class="bar"><view class="bar-fill" style="width: {{item.value}}%;"></view></view>
+          <view class="trend-note">{{item.note}}</view>
+        </view>
+      </block>
+    </view>
+    <view class="card info-card">
+      <view class="info-title">判读规则</view>
+      <view class="info-text">体重看 7 日均值，体脂与去脂体重看 4–8 周趋势；HRV 只与个人 28 日基线比较；睡眠数据不足时降级为“数据不足”，不自动判定恢复差。</view>
+    </view>
+  </block>
+
+  <block wx:if="{{activeTab === 'women'}}">
+    <view class="section-title">女性生命周期</view>
+    <view class="card women-card">
+      <view class="women-main">{{women.stage}}</view>
+      <view class="women-sub">{{women.cycle}}</view>
+      <view class="tag-wrap">
+        <block wx:for="{{women.symptomItems}}" wx:key="*this">
+          <view class="tag">{{item}}</view>
+        </block>
+      </view>
+      <view class="note">{{women.note}}</view>
+    </view>
+
+    <view class="section-title">医疗约束</view>
+    <view class="card thyroid-card">
+      <view class="info-title">{{thyroid.title}}</view>
+      <block wx:for="{{thyroid.items}}" wx:key="*this">
+        <view class="reason">• {{item}}</view>
+      </block>
+    </view>
+  </block>
+
+  <block wx:if="{{activeTab === 'evidence'}}">
+    <view class="section-title">Stacy Sims 证据引擎</view>
+    <view class="card evidence-card">
+      <block wx:for="{{evidence}}" wx:key="level">
+        <view class="evidence-row">
+          <view class="evidence-level">{{item.level}}</view>
+          <view class="evidence-copy">
+            <view class="evidence-title">{{item.title}}</view>
+            <view class="evidence-rule">{{item.rule}}</view>
+          </view>
+        </view>
+      </block>
+    </view>
+    <view class="card info-card">
+      <view class="info-title">核心原则</view>
+      <view class="info-text">月经周期是解释变量，而不是单独的训练开关。当天建议由睡眠、HRV、静息心率、主观精力、周期症状与训练负荷共同决定。</view>
+    </view>
+  </block>
+
+  <view class="footer">生活方式管理与纵向数据展示，不替代医疗诊断或治疗。</view>
+</view>
