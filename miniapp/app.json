@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "女性健康数字孪生",
+    "navigationBarBackgroundColor": "#F7F5F2",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F7F5F2",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2"
+}
