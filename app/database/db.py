@@ -1,7 +1,9 @@
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "health.db"
+DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "health.db"
+DB_PATH = Path(os.getenv("HEALTH_DB_PATH", str(DEFAULT_DB_PATH))).expanduser().resolve()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS body_metrics (
