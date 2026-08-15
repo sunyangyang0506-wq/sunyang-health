@@ -17,7 +17,7 @@ from app.database.db import get_connection, init_db
 from app.reports.daily_report import generate_daily_report
 from app.services.health_pipeline import build_daily_snapshot, ingest_apple_health
 
-app = FastAPI(title="Personal Health Digital Twin API", version="1.2.0")
+app = FastAPI(title="Personal Health Digital Twin API", version="1.3.0")
 
 
 class SyncPayload(BaseModel):
@@ -83,6 +83,10 @@ def require_app_session(authorization: str | None = Header(default=None)) -> dic
     return _verify_app_session(authorization.removeprefix("Bearer ").strip())
 
 
+def _allow_reenroll() -> bool:
+    return os.getenv("APP_ALLOW_REENROLL", "false").strip().lower() in {"1", "true", "yes"}
+
+
 @app.on_event("startup")
 def startup() -> None:
     init_db()
@@ -100,6 +104,22 @@ def app_enroll(payload: AppEnrollPayload) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="APP_ENROLLMENT_CODE is not configured")
     if not hmac.compare_digest(payload.enrollment_code.strip(), expected):
         raise HTTPException(status_code=401, detail="invalid enrollment code")
+
+    # The first successful enrollment consumes the pairing code. Recovery is an
+    # explicit operator action: temporarily set APP_ALLOW_REENROLL=true and rotate
+    # APP_ENROLLMENT_CODE before binding the replacement device.
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT value FROM app_state WHERE key='owner_enrolled'").fetchone()
+        already_enrolled = bool(row and row["value"] == "1")
+        if already_enrolled and not _allow_reenroll():
+            raise HTTPException(status_code=409, detail="owner device is already enrolled")
+        conn.execute(
+            """INSERT INTO app_state(key,value,updated_at) VALUES('owner_enrolled','1',CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value='1', updated_at=CURRENT_TIMESTAMP"""
+        )
+        conn.commit()
+
     return {
         "session_token": _issue_app_session(),
         "expires_in_seconds": 30 * 24 * 60 * 60,
