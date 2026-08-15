@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Iterable
 
 
 APPLE_HEALTH_METRIC_MAP = {
@@ -17,7 +17,7 @@ APPLE_HEALTH_METRIC_MAP = {
     "heartRateVariabilitySDNN": "hrv_ms",
     "restingHeartRate": "resting_heart_rate",
     "vo2Max": "vo2max",
-    "sleepAnalysis": "sleep_hours",
+    "sleepAnalysis": "total_sleep_hours",
 }
 
 
@@ -73,3 +73,31 @@ def normalize_sample(sample: dict[str, Any]) -> NormalizedHealthRecord:
         unit=normalized_unit,
         raw_metric=metric,
     )
+
+
+def normalize_records(samples: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert the mobile neutral contract into persisted canonical records.
+
+    Invalid records are skipped instead of failing the complete sync batch. The
+    client sends already-aggregated daily values for cumulative metrics such as
+    steps and sleep duration, while point-in-time metrics keep their sample time.
+    """
+    normalized: list[dict[str, Any]] = []
+    for sample in samples:
+        try:
+            record = normalize_sample(sample)
+        except (KeyError, TypeError, ValueError):
+            continue
+        normalized.append(
+            {
+                "record_date": record.recorded_at.astimezone().date().isoformat(),
+                "timestamp": record.recorded_at.isoformat(),
+                "metric": record.metric,
+                "value": record.value,
+                "unit": record.unit,
+                "source": record.source,
+                "confidence": record.confidence,
+                "raw_metric": record.raw_metric,
+            }
+        )
+    return normalized
