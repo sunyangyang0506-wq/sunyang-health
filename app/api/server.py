@@ -88,6 +88,9 @@ def require_wechat_session(authorization: str | None = Header(default=None)) -> 
     payload = _verify_session(authorization[7:])
     openid = str(payload["sub"])
     allowed = {item.strip() for item in os.getenv("WECHAT_ALLOWED_OPENIDS", "").split(",") if item.strip()}
+    allow_any = os.getenv("WECHAT_ALLOW_ANY_USER", "false").lower() == "true"
+    if not allowed and not allow_any:
+        raise HTTPException(status_code=503, detail="WECHAT_ALLOWED_OPENIDS is not configured")
     if allowed and openid not in allowed:
         raise HTTPException(status_code=403, detail="user is not authorized for this health profile")
     return openid
