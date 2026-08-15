@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS body_metrics (
     bmi REAL,
     body_fat_percent REAL,
     muscle_mass_kg REAL,
+    lean_body_mass_kg REAL,
     basal_metabolic_rate REAL,
     source TEXT,
     confidence TEXT DEFAULT 'B'
@@ -83,3 +84,7 @@ def get_connection() -> sqlite3.Connection:
 def init_db() -> None:
     with get_connection() as conn:
         conn.executescript(SCHEMA)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(body_metrics)").fetchall()}
+        if "lean_body_mass_kg" not in columns:
+            conn.execute("ALTER TABLE body_metrics ADD COLUMN lean_body_mass_kg REAL")
+        conn.commit()
