@@ -17,7 +17,7 @@ from app.database.db import get_connection, init_db
 from app.reports.daily_report import generate_daily_report
 from app.services.health_pipeline import build_daily_snapshot, ingest_apple_health
 
-app = FastAPI(title="Personal Health Digital Twin API", version="1.1.0")
+app = FastAPI(title="Personal Health Digital Twin API", version="1.2.0")
 
 
 class SyncPayload(BaseModel):
@@ -106,9 +106,23 @@ def app_enroll(payload: AppEnrollPayload) -> dict[str, Any]:
     }
 
 
+@app.post("/v1/app/sync/apple-health")
+def app_sync_apple_health(
+    payload: SyncPayload,
+    _: dict[str, Any] = Depends(require_app_session),
+) -> dict[str, Any]:
+    if len(payload.records) > 10000:
+        raise HTTPException(status_code=413, detail="too many health records in one sync")
+    return ingest_apple_health(payload.records)
+
+
 @app.get("/v1/app/summary")
-def app_summary(_: dict[str, Any] = Depends(require_app_session)) -> dict[str, Any]:
-    snapshot = build_daily_snapshot(date.today())
+def app_summary(
+    record_date: date | None = None,
+    _: dict[str, Any] = Depends(require_app_session),
+) -> dict[str, Any]:
+    target_date = record_date or date.today()
+    snapshot = build_daily_snapshot(target_date)
     report = generate_daily_report(snapshot)
     body = snapshot.get("body") or {}
     used = report.get("used_data") or {}
@@ -130,7 +144,7 @@ def app_summary(_: dict[str, Any] = Depends(require_app_session)) -> dict[str, A
             "steps": used.get("steps"),
             "weight_kg": used.get("weight_kg"),
             "body_fat_percent": used.get("body_fat_percent"),
-            "lean_mass_kg": body.get("lean_mass_kg"),
+            "lean_mass_kg": body.get("lean_body_mass_kg"),
         },
         "actions": report.get("today_actions") or [],
         "data_quality": report.get("data_quality") or {},
