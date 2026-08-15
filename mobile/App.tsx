@@ -14,12 +14,19 @@ import {
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 
-import { enroll, getSummary, HealthSummary } from './src/api';
-import { connectHealthData } from './src/healthkit';
+import { enroll, getSummary, syncAppleHealth, type HealthSummary } from './src/api';
+import { collectHealthRecords, connectHealthData } from './src/healthkit';
 
 const SESSION_KEY = 'sunyang_health_session';
 const tabs = ['今日', '趋势', '女性', '证据'] as const;
 type Tab = (typeof tabs)[number];
+
+function deviceLocalDate(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 export default function App() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -27,7 +34,9 @@ export default function App() {
   const [summary, setSummary] = useState<HealthSummary | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('今日');
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState('');
+  const [lastSyncText, setLastSyncText] = useState('尚未从本机同步');
 
   useEffect(() => {
     void bootstrap();
@@ -56,6 +65,13 @@ export default function App() {
     }
   }
 
+  async function clearExpiredSession() {
+    await SecureStore.deleteItemAsync(SESSION_KEY);
+    setSessionToken(null);
+    setSummary(null);
+    Alert.alert('登录已过期', '请重新输入配对码完成设备绑定。');
+  }
+
   async function handleEnroll() {
     if (!enrollmentCode.trim()) {
       Alert.alert('请输入一次性配对码');
@@ -81,15 +97,12 @@ export default function App() {
     if (!token) return;
     setMessage('');
     try {
-      const next = await getSummary(token);
+      const next = await getSummary(token, deviceLocalDate());
       setSummary(next);
     } catch (error) {
       const text = error instanceof Error ? error.message : '加载失败';
       if (text === 'SESSION_EXPIRED') {
-        await SecureStore.deleteItemAsync(SESSION_KEY);
-        setSessionToken(null);
-        setSummary(null);
-        Alert.alert('登录已过期', '请重新输入配对码完成设备绑定。');
+        await clearExpiredSession();
       } else {
         setMessage(text);
       }
@@ -97,11 +110,38 @@ export default function App() {
   }
 
   async function handleConnectHealth() {
+    if (!sessionToken) return;
+    setSyncing(true);
+    setMessage('');
     try {
-      const result = await connectHealthData();
-      Alert.alert(Platform.OS === 'ios' ? 'Apple Health' : '健康数据', result);
+      const authorizationMessage = await connectHealthData();
+      if (Platform.OS !== 'ios') {
+        Alert.alert('健康数据', authorizationMessage);
+        return;
+      }
+
+      const records = await collectHealthRecords();
+      if (!records.length) {
+        Alert.alert('暂无可同步数据', '请确认已在系统健康权限中允许读取，且 Apple Health 中已有记录。');
+        return;
+      }
+
+      const result = await syncAppleHealth(sessionToken, records);
+      await refreshSummary(sessionToken);
+      const count = result.written_records ?? records.length;
+      const days = result.days ?? 1;
+      const timeText = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastSyncText(`本机同步 ${count} 项 · ${days} 天 · ${timeText}`);
+      Alert.alert('同步完成', `已读取并同步 ${count} 项健康数据，今日建议已刷新。`);
     } catch (error) {
-      Alert.alert('授权失败', error instanceof Error ? error.message : '未知错误');
+      const text = error instanceof Error ? error.message : '未知错误';
+      if (text === 'SESSION_EXPIRED') {
+        await clearExpiredSession();
+      } else {
+        Alert.alert('同步失败', text);
+      }
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -121,6 +161,7 @@ export default function App() {
       ['步数', metrics.steps, ''],
       ['体重', metrics.weight_kg, 'kg'],
       ['体脂', metrics.body_fat_percent, '%'],
+      ['去脂体重', metrics.lean_mass_kg, 'kg'],
     ],
     [metrics]
   );
@@ -191,6 +232,7 @@ export default function App() {
               <Text style={styles.heroLabel}>{readiness?.level || '数据待同步'}</Text>
               <Text style={styles.heroScore}>{readiness?.score ?? '—'}</Text>
               <Text style={styles.body}>{readiness?.summary || '连接数据后生成今日恢复与训练建议。'}</Text>
+              <Text style={styles.caption}>数据日期：{summary?.record_date || deviceLocalDate()} · {lastSyncText}</Text>
             </View>
 
             <View style={styles.grid}>
@@ -211,13 +253,25 @@ export default function App() {
               ))}
             </Section>
 
-            <Pressable style={styles.secondaryButton} onPress={handleConnectHealth}>
-              <Text style={styles.secondaryButtonText}>
-                {Platform.OS === 'ios' ? '连接 Apple Health' : '连接健康数据'}
-              </Text>
+            <Pressable
+              style={[styles.primaryButton, syncing && styles.buttonDisabled]}
+              onPress={() => void handleConnectHealth()}
+              disabled={syncing}
+            >
+              {syncing ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {Platform.OS === 'ios' ? '授权并同步 Apple Health' : '连接健康数据'}
+                </Text>
+              )}
             </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={() => void refreshSummary()}>
-              <Text style={styles.secondaryButtonText}>刷新数据</Text>
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={() => void refreshSummary()}
+              disabled={syncing}
+            >
+              <Text style={styles.secondaryButtonText}>只刷新云端摘要</Text>
             </Pressable>
             {!!message && <Text style={styles.warning}>{message}</Text>}
           </>
@@ -274,8 +328,9 @@ const styles = StyleSheet.create({
   link: { color: '#344054', fontWeight: '700' },
   loginCard: { margin: 22, marginTop: 90, padding: 24, borderRadius: 24, backgroundColor: '#FFFFFF' },
   input: { marginTop: 24, borderWidth: 1, borderColor: '#D0D5DD', backgroundColor: '#FFFFFF', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16 },
-  primaryButton: { marginTop: 14, backgroundColor: '#101828', borderRadius: 14, alignItems: 'center', paddingVertical: 14 },
+  primaryButton: { marginTop: 14, backgroundColor: '#101828', borderRadius: 14, alignItems: 'center', justifyContent: 'center', minHeight: 48, paddingVertical: 14 },
   primaryButtonText: { color: '#FFFFFF', fontWeight: '800' },
+  buttonDisabled: { opacity: 0.65 },
   secondaryButton: { marginTop: 12, borderWidth: 1, borderColor: '#D0D5DD', borderRadius: 14, alignItems: 'center', paddingVertical: 13, backgroundColor: '#FFFFFF' },
   secondaryButtonText: { color: '#344054', fontWeight: '700' },
   tabBar: { flexDirection: 'row', marginHorizontal: 16, borderRadius: 14, padding: 4, backgroundColor: '#EAECF0' },
