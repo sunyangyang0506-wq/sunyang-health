@@ -1,3 +1,12 @@
+export type HealthRecord = {
+  metric: string;
+  value: number;
+  unit?: string;
+  recorded_at: string;
+  source?: string;
+  confidence?: string;
+};
+
 export type HealthSummary = {
   record_date?: string;
   readiness?: {
@@ -17,6 +26,12 @@ export type HealthSummary = {
   };
   actions?: string[];
   data_quality?: Record<string, unknown>;
+};
+
+export type SyncResult = {
+  normalized_records?: number;
+  written_records?: number;
+  days?: number;
 };
 
 const apiBase = (process.env.EXPO_PUBLIC_API_BASE || '').replace(/\/$/, '');
@@ -42,8 +57,31 @@ export async function enroll(enrollmentCode: string): Promise<string> {
   return data.session_token as string;
 }
 
-export async function getSummary(sessionToken: string): Promise<HealthSummary> {
-  const response = await fetch(`${requireApiBase()}/v1/app/summary`, {
+export async function syncAppleHealth(
+  sessionToken: string,
+  records: HealthRecord[]
+): Promise<SyncResult> {
+  const response = await fetch(`${requireApiBase()}/v1/app/sync/apple-health`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ records }),
+  });
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('SESSION_EXPIRED');
+    throw new Error(`健康数据同步失败 (${response.status})`);
+  }
+  return response.json();
+}
+
+export async function getSummary(
+  sessionToken: string,
+  localDate?: string
+): Promise<HealthSummary> {
+  const query = localDate ? `?record_date=${encodeURIComponent(localDate)}` : '';
+  const response = await fetch(`${requireApiBase()}/v1/app/summary${query}`, {
     headers: { Authorization: `Bearer ${sessionToken}` },
   });
   if (!response.ok) {
