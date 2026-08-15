@@ -3,6 +3,7 @@ export type HealthRecord = {
   value: number;
   unit?: string;
   recorded_at: string;
+  record_date?: string;
   source?: string;
   confidence?: string;
 };
