@@ -60,7 +60,6 @@ function quantityValue(sample: any): number | null {
 
 function isAsleepValue(value: unknown): boolean {
   if (typeof value === 'number') {
-    // HealthKit: inBed=0, asleepUnspecified=1, awake=2, asleepCore=3, deep=4, REM=5.
     return value === 1 || value === 3 || value === 4 || value === 5;
   }
   const text = String(value ?? '').toLowerCase();
@@ -95,11 +94,13 @@ export async function collectHealthRecords(): Promise<HealthRecord[]> {
       const sample: any = await getMostRecentQuantitySample(identifier as any);
       const value = quantityValue(sample);
       if (value === null) continue;
+      const recordedAt = sampleDate(sample);
       records.push({
         metric,
         value,
         unit: sample?.unit,
-        recorded_at: sampleDate(sample),
+        recorded_at: recordedAt,
+        record_date: localDateKey(recordedAt),
         source: 'Apple Health',
         confidence: 'B',
       });
@@ -120,6 +121,7 @@ export async function collectHealthRecords(): Promise<HealthRecord[]> {
         value,
         unit: last?.unit,
         recorded_at: now.toISOString(),
+        record_date: todayKey,
         source: 'Apple Health',
         confidence: 'B',
       });
@@ -147,6 +149,7 @@ export async function collectHealthRecords(): Promise<HealthRecord[]> {
         value: Math.round(hours * 100) / 100,
         unit: 'h',
         recorded_at: now.toISOString(),
+        record_date: todayKey,
         source: 'Apple Health',
         confidence: 'B',
       });
