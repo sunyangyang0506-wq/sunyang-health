@@ -79,8 +79,8 @@ def normalize_records(samples: Iterable[dict[str, Any]]) -> list[dict[str, Any]]
     """Convert the mobile neutral contract into persisted canonical records.
 
     Invalid records are skipped instead of failing the complete sync batch. The
-    client sends already-aggregated daily values for cumulative metrics such as
-    steps and sleep duration, while point-in-time metrics keep their sample time.
+    mobile client may send `record_date` using the device's local calendar date;
+    that value takes precedence over the server timezone when bucketing records.
     """
     normalized: list[dict[str, Any]] = []
     for sample in samples:
@@ -88,9 +88,12 @@ def normalize_records(samples: Iterable[dict[str, Any]]) -> list[dict[str, Any]]
             record = normalize_sample(sample)
         except (KeyError, TypeError, ValueError):
             continue
+        record_date = sample.get("record_date")
+        if not isinstance(record_date, str) or len(record_date) != 10:
+            record_date = record.recorded_at.astimezone().date().isoformat()
         normalized.append(
             {
-                "record_date": record.recorded_at.astimezone().date().isoformat(),
+                "record_date": record_date,
                 "timestamp": record.recorded_at.isoformat(),
                 "metric": record.metric,
                 "value": record.value,
