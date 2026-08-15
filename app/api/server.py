@@ -17,7 +17,7 @@ from app.database.db import get_connection, init_db
 from app.reports.daily_report import generate_daily_report
 from app.services.health_pipeline import build_daily_snapshot, ingest_apple_health
 
-app = FastAPI(title="Personal Health Digital Twin API", version="1.3.0")
+app = FastAPI(title="Personal Health Digital Twin API", version="1.4.0")
 
 
 class SyncPayload(BaseModel):
@@ -73,6 +73,8 @@ def _verify_app_session(token: str) -> dict[str, Any]:
         if payload.get("sub") != "owner" or int(payload.get("exp", 0)) < int(time.time()):
             raise ValueError("expired")
         return payload
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=401, detail="invalid or expired app session") from exc
 
@@ -85,6 +87,18 @@ def require_app_session(authorization: str | None = Header(default=None)) -> dic
 
 def _allow_reenroll() -> bool:
     return os.getenv("APP_ALLOW_REENROLL", "false").strip().lower() in {"1", "true", "yes"}
+
+
+def _latest_body_on_or_before(target_date: date) -> dict[str, Any]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT * FROM body_metrics
+            WHERE record_date <= ?
+            ORDER BY record_date DESC, id DESC
+            LIMIT 1""",
+            (target_date.isoformat(),),
+        ).fetchone()
+    return dict(row) if row else {}
 
 
 @app.on_event("startup")
@@ -105,9 +119,9 @@ def app_enroll(payload: AppEnrollPayload) -> dict[str, Any]:
     if not hmac.compare_digest(payload.enrollment_code.strip(), expected):
         raise HTTPException(status_code=401, detail="invalid enrollment code")
 
-    # The first successful enrollment consumes the pairing code. Recovery is an
-    # explicit operator action: temporarily set APP_ALLOW_REENROLL=true and rotate
-    # APP_ENROLLMENT_CODE before binding the replacement device.
+    # Validate session signing before consuming the one-time enrollment state.
+    session_token = _issue_app_session()
+
     with get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT value FROM app_state WHERE key='owner_enrolled'").fetchone()
@@ -121,8 +135,9 @@ def app_enroll(payload: AppEnrollPayload) -> dict[str, Any]:
         conn.commit()
 
     return {
-        "session_token": _issue_app_session(),
+        "session_token": session_token,
         "expires_in_seconds": 30 * 24 * 60 * 60,
+        "enrollment_consumed": True,
     }
 
 
@@ -144,13 +159,16 @@ def app_summary(
     target_date = record_date or date.today()
     snapshot = build_daily_snapshot(target_date)
     report = generate_daily_report(snapshot)
-    body = snapshot.get("body") or {}
     used = report.get("used_data") or {}
     priorities = report.get("priorities") or []
     core = report.get("core_conclusion") or []
 
+    today_body = snapshot.get("body") or {}
+    body_view = today_body or _latest_body_on_or_before(target_date)
+
     return {
         "record_date": snapshot.get("record_date"),
+        "body_measurement_date": body_view.get("record_date"),
         "readiness": {
             "level": report.get("mode"),
             "score": None,
@@ -162,9 +180,9 @@ def app_summary(
             "hrv_ms": used.get("hrv_ms"),
             "resting_heart_rate": used.get("resting_heart_rate"),
             "steps": used.get("steps"),
-            "weight_kg": used.get("weight_kg"),
-            "body_fat_percent": used.get("body_fat_percent"),
-            "lean_mass_kg": body.get("lean_body_mass_kg"),
+            "weight_kg": used.get("weight_kg") if used.get("weight_kg") is not None else body_view.get("weight_kg"),
+            "body_fat_percent": used.get("body_fat_percent") if used.get("body_fat_percent") is not None else body_view.get("body_fat_percent"),
+            "lean_mass_kg": body_view.get("lean_body_mass_kg"),
         },
         "actions": report.get("today_actions") or [],
         "data_quality": report.get("data_quality") or {},
