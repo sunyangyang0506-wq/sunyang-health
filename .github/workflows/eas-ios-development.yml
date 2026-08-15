@@ -1,0 +1,47 @@
+name: EAS iOS Development Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_API_BASE: ${{ vars.EXPO_PUBLIC_API_BASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package.json
+
+      - name: Validate required deployment configuration
+        shell: bash
+        run: |
+          test -n "$EXPO_TOKEN" || (echo "Missing repository secret: EXPO_TOKEN" && exit 1)
+          test -n "$EXPO_PUBLIC_API_BASE" || (echo "Missing repository variable: EXPO_PUBLIC_API_BASE" && exit 1)
+          case "$EXPO_PUBLIC_API_BASE" in
+            https://*) ;;
+            *) echo "EXPO_PUBLIC_API_BASE must be a public HTTPS origin"; exit 1 ;;
+          esac
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install EAS CLI
+        run: npm install --global eas-cli
+
+      - name: Verify Expo authentication
+        run: eas whoami
+
+      - name: Start physical-device development build
+        run: eas build --platform ios --profile development --non-interactive --no-wait
