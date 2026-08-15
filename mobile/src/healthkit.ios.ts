@@ -2,7 +2,7 @@ import {
   getMostRecentQuantitySample,
   isHealthDataAvailable,
   queryCategorySamples,
-  queryQuantitySamples,
+  queryStatisticsForQuantity,
   requestAuthorization,
 } from '@kingstinct/react-native-healthkit';
 
@@ -21,7 +21,7 @@ const readTypes = [
   'HKCategoryTypeIdentifierSleepAnalysis',
 ] as const;
 
-const quantityMetricMap: Record<string, string> = {
+const pointMetricMap: Record<string, string> = {
   HKQuantityTypeIdentifierRestingHeartRate: 'restingHeartRate',
   HKQuantityTypeIdentifierHeartRateVariabilitySDNN: 'heartRateVariabilitySDNN',
   HKQuantityTypeIdentifierBodyMass: 'bodyMass',
@@ -29,11 +29,11 @@ const quantityMetricMap: Record<string, string> = {
   HKQuantityTypeIdentifierLeanBodyMass: 'leanBodyMass',
 };
 
-const cumulativeMetricMap: Record<string, string> = {
-  HKQuantityTypeIdentifierStepCount: 'stepCount',
-  HKQuantityTypeIdentifierActiveEnergyBurned: 'activeEnergyBurned',
-  HKQuantityTypeIdentifierAppleExerciseTime: 'appleExerciseTime',
-  HKQuantityTypeIdentifierDistanceWalkingRunning: 'distanceWalkingRunning',
+const cumulativeMetricMap: Record<string, { metric: string; unit: string }> = {
+  HKQuantityTypeIdentifierStepCount: { metric: 'stepCount', unit: 'count' },
+  HKQuantityTypeIdentifierActiveEnergyBurned: { metric: 'activeEnergyBurned', unit: 'kcal' },
+  HKQuantityTypeIdentifierAppleExerciseTime: { metric: 'appleExerciseTime', unit: 'min' },
+  HKQuantityTypeIdentifierDistanceWalkingRunning: { metric: 'distanceWalkingRunning', unit: 'km' },
 };
 
 function unwrapSamples(result: any): any[] {
@@ -47,6 +47,12 @@ function localDateKey(value: string | Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function startOfLocalDay(date = new Date()): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
 }
 
 function sampleDate(sample: any): string {
@@ -89,7 +95,7 @@ export async function collectHealthRecords(): Promise<HealthRecord[]> {
   const todayKey = localDateKey(now);
   const records: HealthRecord[] = [];
 
-  for (const [identifier, metric] of Object.entries(quantityMetricMap)) {
+  for (const [identifier, metric] of Object.entries(pointMetricMap)) {
     try {
       const sample: any = await getMostRecentQuantitySample(identifier as any);
       const value = quantityValue(sample);
@@ -109,24 +115,34 @@ export async function collectHealthRecords(): Promise<HealthRecord[]> {
     }
   }
 
-  for (const [identifier, metric] of Object.entries(cumulativeMetricMap)) {
+  for (const [identifier, config] of Object.entries(cumulativeMetricMap)) {
     try {
-      const result: any = await queryQuantitySamples(identifier as any, { limit: 2000 } as any);
-      const samples = unwrapSamples(result).filter((sample) => localDateKey(sampleDate(sample)) === todayKey);
-      const value = samples.reduce((sum, sample) => sum + (quantityValue(sample) ?? 0), 0);
-      if (!samples.length || !Number.isFinite(value)) continue;
-      const last = samples[samples.length - 1];
+      const stats: any = await queryStatisticsForQuantity(
+        identifier as any,
+        ['cumulativeSum'],
+        {
+          filter: {
+            date: {
+              startDate: startOfLocalDay(now),
+              endDate: now,
+            },
+          },
+          unit: config.unit,
+        } as any
+      );
+      const value = Number(stats?.sumQuantity?.quantity);
+      if (!Number.isFinite(value)) continue;
       records.push({
-        metric,
+        metric: config.metric,
         value,
-        unit: last?.unit,
+        unit: stats?.sumQuantity?.unit || config.unit,
         recorded_at: now.toISOString(),
         record_date: todayKey,
         source: 'Apple Health',
         confidence: 'B',
       });
     } catch {
-      // Keep partial sync usable when one cumulative metric is unavailable.
+      // HealthKit statistics may be unavailable for a denied or unsupported type.
     }
   }
 
